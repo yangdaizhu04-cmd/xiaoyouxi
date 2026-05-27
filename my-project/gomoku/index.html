@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>五子棋</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">⚫ 五子棋 ⚪</h1>
+        
+        <!-- ═══ 模式切换 ═══ -->
+        <div class="mode-bar">
+            <button class="mode-btn active" id="modePvP" data-mode="pvp">👥 双人对战</button>
+            <button class="mode-btn" id="modePvAI" data-mode="pvai">🤖 人机对战</button>
+            <button class="sound-btn" id="soundToggle" title="音效开关">🔊</button>
+            <button class="sound-btn theme-btn" id="themeToggle" title="切换主题">🌙</button>
+        </div>
+
+        <!-- ═══ AI 难度 ═══ -->
+        <div class="diff-bar" id="diffBar">
+            <button class="diff-btn" data-diff="easy">🟢 简单</button>
+            <button class="diff-btn active" data-diff="medium">🟡 中等</button>
+            <button class="diff-btn" data-diff="hard">🔴 困难</button>
+        </div>
+
+        <div class="game-info">
+            <div class="turn-indicator">
+                <span class="turn-label">当前落子：</span>
+                <span class="turn-stone" id="turnStone">⚫</span>
+                <span class="turn-text" id="turnText">黑棋</span>
+            </div>
+            <div class="move-counter">
+                第 <span id="moveCount">0</span> 手
+            </div>
+        </div>
+
+        <!-- ═══ 棋盘大小 ═══ -->
+        <div class="size-bar">
+            <span class="size-label">📏 棋盘</span>
+            <button class="size-btn" data-size="9">9×9</button>
+            <button class="size-btn" data-size="13">13×13</button>
+            <button class="size-btn active" data-size="15">15×15</button>
+        </div>
+
+        <!-- ═══ 计时器 ═══ -->
+        <div class="timer-bar">
+            <div class="timer-item" id="timerBlack">
+                <span class="timer-stone">⚫</span>
+                <span class="timer-time" id="timeBlack">10:00</span>
+            </div>
+            <div class="timer-item" id="timerWhite">
+                <span class="timer-stone">⚪</span>
+                <span class="timer-time" id="timeWhite">10:00</span>
+            </div>
+        </div>
+
+        <div class="board-wrapper">
+            <canvas id="boardCanvas" width="600" height="600"></canvas>
+        </div>
+
+        <div class="controls">
+            <button id="resetBtn" class="btn btn-reset">↺ 重新开始</button>
+            <button id="undoBtn" class="btn btn-undo">↩ 悔棋</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <!-- ═══ 复盘控制 ═══ -->
+        <div class="replay-bar hidden" id="replayBar">
+            <button class="replay-btn" id="replayPrev" title="上一步">⏮</button>
+            <button class="replay-btn" id="replayPlay" title="自动播放">▶</button>
+            <button class="replay-btn" id="replayNext" title="下一步">⏭</button>
+            <span class="replay-step" id="replayStep">0/0</span>
+            <button class="replay-exit" id="replayExit">✕ 退出</button>
+        </div>
+
+        <!-- ═══ 禁手提示 ═══ -->
+        <div class="forbidden-tip hidden" id="forbiddenTip">🚫 禁手！黑棋不可在此落子</div>
+
+        <!-- ═══ 快捷键提示 ═══ -->
+        <div class="shortcut-hint">R 重开 · Z 悔棋 · Space 暂停计时</div>
+
+        <!-- ═══ 落子记录 ═══ -->
+        <div class="history-panel" id="historyPanel">
+            <div class="history-header">
+                <span class="history-title">📜 落子记录</span>
+                <button class="history-toggle" id="historyToggle" title="折叠">▲</button>
+            </div>
+            <div class="history-body" id="historyBody">
+                <ol class="history-list" id="historyList"></ol>
+                <div class="history-empty" id="historyEmpty">暂无落子</div>
+            </div>
+        </div>
+
+        <!-- ═══ 统计面板 ═══ -->
+        <div class="dashboard" id="dashboard">
+            <div class="dash-header">
+                <span class="dash-title">📊 对局统计</span>
+                <button class="dash-toggle" id="dashToggle" title="折叠">▲</button>
+            </div>
+            <div class="dash-body" id="dashBody">
+                <div class="dash-row">
+                    <div class="dash-item">
+                        <span class="dash-value" id="totalGames">0</span>
+                        <span class="dash-label">总局数</span>
+                    </div>
+                    <div class="dash-item dash-win">
+                        <span class="dash-value" id="blackWins">0</span>
+                        <span class="dash-label">黑胜</span>
+                    </div>
+                    <div class="dash-item dash-win-white">
+                        <span class="dash-value" id="whiteWins">0</span>
+                        <span class="dash-label">白胜</span>
+                    </div>
+                    <div class="dash-item">
+                        <span class="dash-value" id="draws">0</span>
+                        <span class="dash-label">平局</span>
+                    </div>
+                    <div class="dash-item">
+                        <span class="dash-value" id="avgMoves">0</span>
+                        <span class="dash-label">平均手数</span>
+                    </div>
+                    <div class="dash-item">
+                        <span class="dash-value" id="maxMoves">0</span>
+                        <span class="dash-label">最长对局</span>
+                    </div>
+                </div>
+                <div class="dash-actions">
+                    <button class="btn-dash-clear" id="clearStatsBtn">🗑️ 清除记录</button>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
