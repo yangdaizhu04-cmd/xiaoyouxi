@@ -24,8 +24,20 @@ const moveCount = document.getElementById('moveCount');
 const statusEl  = document.getElementById('status');
 
 // 模式
-const modePvP  = document.getElementById('modePvP');
-const modePvAI = document.getElementById('modePvAI');
+const modePvP    = document.getElementById('modePvP');
+const modePvAI   = document.getElementById('modePvAI');
+const modeOnline = document.getElementById('modeOnline');
+
+// 联机面板
+const onlinePanel    = document.getElementById('onlinePanel');
+const btnCreateRoom  = document.getElementById('btnCreateRoom');
+const btnJoinRoom    = document.getElementById('btnJoinRoom');
+const btnCancelRoom  = document.getElementById('btnCancelRoom');
+const roomIdInput    = document.getElementById('roomIdInput');
+const onlineStatus   = document.getElementById('onlineStatus');
+const onlineStatusText = document.getElementById('onlineStatusText');
+const onlineRoomId   = document.getElementById('onlineRoomId');
+const onlineActions  = document.querySelector('.online-actions');
 
 // 音效
 const soundToggle = document.getElementById('soundToggle');
@@ -68,8 +80,14 @@ let moves = [];
 let gameOver = false;
 let winLine = null;
 
-let gameMode = 'pvp';      // 'pvp' | 'pvai'
+let gameMode = 'pvp';      // 'pvp' | 'pvai' | 'online'
 let difficulty = 'medium'; // 'easy' | 'medium' | 'hard'
+
+// 联机状态
+let ws = null;
+let onlineRoomIdStr = null;
+let myOnlineColor = null;    // 'black' | 'white'
+let opponentConnected = false;
 let soundEnabled = true;
 let audioCtx = null;
 
@@ -1067,6 +1085,12 @@ function handleClick(e) {
     if (aiThinking) return;
     // AI 模式下轮到 AI 时不允许点击
     if (gameMode === 'pvai' && currentPlayer === WHITE) return;
+    // 联机模式下不是自己回合不允许点击
+    if (gameMode === 'online') {
+        if (!opponentConnected) return;
+        if ((myOnlineColor === 'black' && currentPlayer !== BLACK) ||
+            (myOnlineColor === 'white' && currentPlayer !== WHITE)) return;
+    }
 
     const pos = eventToBoard(e);
     if (!pos) return;
@@ -1076,6 +1100,10 @@ function handleClick(e) {
     // 启动掉落动画，完成后执行落子逻辑
     startDropAnimation(r, c, currentPlayer, () => {
         const ended = placeStone(r, c);
+        // 联机模式 → 发送落子给对手
+        if (gameMode === 'online' && !ended) {
+            sendOnlineMsg({ type: 'move', r, c });
+        }
         // AI 模式且游戏未结束 → AI 落子
         if (!ended && gameMode === 'pvai') {
             aiThinking = true;
@@ -1104,6 +1132,11 @@ function aiMove() {
 function undoMove() {
     if (moves.length === 0) return;
     if (aiThinking) return;
+    // 联机模式 → 发送悔棋请求
+    if (gameMode === 'online') {
+        requestOnlineUndo();
+        return;
+    }
     // AI 模式下不能悔棋（或只能悔对手的棋）
     if (gameMode === 'pvai') {
         // 连续悔两步（AI + 玩家）
@@ -1135,6 +1168,14 @@ function undoMove() {
 }
 
 function resetGame() {
+    // 联机模式下重新开始 → 也重新发消息通知
+    if (gameMode === 'online' && opponentConnected) {
+        initBoard();
+        currentPlayer = myOnlineColor === 'black' ? BLACK : WHITE;
+        statusEl.textContent = myOnlineColor === 'black' ? '你执黑，请落子' : '你执白，等待对手落子';
+        statusEl.className = 'status';
+        return;
+    }
     initBoard();
     statusEl.textContent = '';
     statusEl.className = 'status';
@@ -1219,18 +1260,268 @@ function exitReplay() {
 }
 
 // ============================================
+//   联机 WebSocket
+// ============================================
+
+// WebSocket 地址：自动适配本地 / 部署环境
+const WS_URL = (() => {
+    const host = window.location.host;
+    // 本地开发：如果页面是 file:// 或 localhost，用默认端口
+    if (!host || host.startsWith('localhost') || host.startsWith('127.0.0.1')) {
+        return 'ws://localhost:3456';
+    }
+    // 部署环境：同主机 + 同端口，协议自动 wss/http
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${host}`;
+})();
+
+function connectWebSocket() {
+    return new Promise((resolve, reject) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            resolve(ws);
+            return;
+        }
+        const socket = new WebSocket(WS_URL);
+        socket.onopen = () => {
+            ws = socket;
+            console.log('🔗 WebSocket 已连接');
+            resolve(socket);
+        };
+        socket.onerror = () => reject(new Error('WebSocket 连接失败'));
+        socket.onmessage = handleServerMessage;
+        socket.onclose = () => {
+            console.log('🔌 WebSocket 已断开');
+            if (gameMode === 'online' && !gameOver) {
+                statusEl.textContent = '⚠️ 连接断开';
+                statusEl.className = 'status';
+            }
+            ws = null;
+            opponentConnected = false;
+        };
+    });
+}
+
+function handleServerMessage(event) {
+    let msg;
+    try { msg = JSON.parse(event.data); }
+    catch (_) { return; }
+
+    switch (msg.type) {
+        case 'room_created':
+            onlineRoomIdStr = msg.roomId;
+            myOnlineColor = msg.player;
+            onlineRoomId.textContent = onlineRoomIdStr;
+            onlineStatusText.textContent = '等待对手加入...';
+            onlineActions.classList.add('hidden');
+            onlineStatus.classList.remove('hidden');
+            statusEl.textContent = `🏠 房间 ${onlineRoomIdStr} — 等待对手...`;
+            statusEl.className = 'status';
+            // 复制房间号到剪贴板
+            copyRoomIdToClipboard();
+            break;
+
+        case 'room_joined':
+            onlineRoomIdStr = msg.roomId;
+            myOnlineColor = msg.player;
+            onlineRoomId.textContent = onlineRoomIdStr;
+            onlineStatusText.textContent = '已加入，等待开始...';
+            onlineActions.classList.add('hidden');
+            onlineStatus.classList.remove('hidden');
+            break;
+
+        case 'opponent_joined':
+            opponentConnected = true;
+            onlineStatusText.textContent = '对手已加入！对局开始';
+            statusEl.textContent = '🎮 对手已加入！你执黑，请落子';
+            statusEl.className = 'status';
+            startOnlineGame();
+            break;
+
+        case 'game_start':
+            opponentConnected = true;
+            onlineStatusText.textContent = '对局进行中...';
+            if (msg.yourColor === 'white') {
+                statusEl.textContent = '🎮 对局开始！你执白，等待对手落子';
+                statusEl.className = 'status';
+            }
+            startOnlineGame();
+            break;
+
+        case 'opponent_move':
+            // 对手落子
+            if (board[msg.r][msg.c] !== EMPTY) return; // 防重复
+            const oppPlayer = myOnlineColor === 'black' ? WHITE : BLACK;
+            startDropAnimation(msg.r, msg.c, oppPlayer, () => {
+                placeStone(msg.r, msg.c);
+            });
+            break;
+
+        case 'undo_request':
+            // 对手请求悔棋
+            showUndoRequest();
+            break;
+
+        case 'undo_response':
+            if (msg.accepted) {
+                // 同意 — 双方各悔一步
+                performOnlineUndo();
+            } else {
+                statusEl.textContent = '🙅 对手拒绝了悔棋请求';
+                statusEl.className = 'status';
+                setTimeout(() => {
+                    if (!gameOver) updateUI();
+                }, 2000);
+            }
+            break;
+
+        case 'opponent_resigned':
+            gameOver = true;
+            statusEl.textContent = '🏳️ 对手投降！你获胜了！';
+            statusEl.className = 'status win';
+            recordGame(myOnlineColor === 'black' ? 'black' : 'white');
+            playWinSound();
+            stopTimer();
+            updateUI();
+            draw();
+            break;
+
+        case 'opponent_left':
+            opponentConnected = false;
+            if (!gameOver) {
+                gameOver = true;
+                statusEl.textContent = '👋 对手离开了房间';
+                statusEl.className = 'status';
+                stopTimer();
+                draw();
+            }
+            break;
+
+        case 'chat':
+            // 聊天消息（可扩展）
+            console.log('💬 对手:', msg.text);
+            break;
+
+        case 'error':
+            statusEl.textContent = '❌ ' + msg.message;
+            statusEl.className = 'status';
+            break;
+
+        default:
+            break;
+    }
+}
+
+function startOnlineGame() {
+    // 确保棋盘已初始化
+    initBoard();
+    gameMode = 'online';
+    gameOver = false;
+    winLine = null;
+    // 根据颜色设置当前玩家
+    currentPlayer = myOnlineColor === 'black' ? BLACK : WHITE;
+    updateUI();
+    startTimer();
+    draw();
+}
+
+function sendOnlineMsg(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+    }
+}
+
+function disconnectOnline() {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    onlineRoomIdStr = null;
+    myOnlineColor = null;
+    opponentConnected = false;
+    onlineActions.classList.remove('hidden');
+    onlineStatus.classList.add('hidden');
+    onlineStatusText.textContent = '';
+}
+
+function copyRoomIdToClipboard() {
+    if (!onlineRoomIdStr) return;
+    navigator.clipboard.writeText(onlineRoomIdStr).then(() => {
+        const prev = onlineStatusText.textContent;
+        onlineStatusText.textContent = '✅ 房间号已复制！分享给好友';
+        setTimeout(() => { onlineStatusText.textContent = prev; }, 2000);
+    }).catch(() => { /* ignore */ });
+}
+
+// ============================================
+//   联机悔棋
+// ============================================
+
+let pendingUndoRequest = false;
+
+function requestOnlineUndo() {
+    if (!opponentConnected || gameOver) return;
+    if (moves.length < 2) return;
+    // 只能在自己回合请求悔棋
+    if ((myOnlineColor === 'black' && currentPlayer !== BLACK) ||
+        (myOnlineColor === 'white' && currentPlayer !== WHITE)) return;
+    pendingUndoRequest = true;
+    sendOnlineMsg({ type: 'undo_request' });
+    statusEl.textContent = '⏳ 已发送悔棋请求，等待对手回应...';
+    statusEl.className = 'status';
+}
+
+function showUndoRequest() {
+    // 弹窗询问是否同意悔棋
+    const choice = confirm('对手请求悔棋，是否同意？');
+    if (choice) {
+        sendOnlineMsg({ type: 'undo_response', accepted: true });
+        performOnlineUndo();
+    } else {
+        sendOnlineMsg({ type: 'undo_response', accepted: false });
+    }
+}
+
+function performOnlineUndo() {
+    // 双方各悔一步
+    if (moves.length >= 2) {
+        for (let i = 0; i < 2; i++) {
+            const last = moves.pop();
+            board[last.r][last.c] = EMPTY;
+        }
+        currentPlayer = myOnlineColor === 'black' ? BLACK : WHITE;
+        gameOver = false;
+        winLine = null;
+        stopTimer();
+        updateUI();
+        renderHistory();
+        draw();
+        startTimer();
+    }
+    pendingUndoRequest = false;
+}
+
+// ============================================
 //   模式切换
 // ============================================
 
 function setMode(mode) {
     if (gameMode === mode) return;
+    // 离开联机模式时断开连接
+    if (gameMode === 'online') {
+        disconnectOnline();
+    }
     gameMode = mode;
     modePvP.classList.toggle('active', mode === 'pvp');
     modePvAI.classList.toggle('active', mode === 'pvai');
+    modeOnline.classList.toggle('active', mode === 'online');
     // 显示/隐藏难度选择
-    diffBar.classList.toggle('hidden', mode === 'pvp');
-    // 切换模式时重置棋盘
-    resetGame();
+    diffBar.classList.toggle('hidden', mode !== 'pvai');
+    // 显示/隐藏联机面板
+    onlinePanel.classList.toggle('hidden', mode !== 'online');
+    // 联机模式下不自动重置棋盘，等房间创建/加入后再初始化
+    if (mode !== 'online') {
+        resetGame();
+    }
 }
 
 // ============================================
@@ -1290,6 +1581,46 @@ document.getElementById('undoBtn').addEventListener('click', undoMove);
 // 模式切换
 modePvP.addEventListener('click', () => setMode('pvp'));
 modePvAI.addEventListener('click', () => setMode('pvai'));
+modeOnline.addEventListener('click', () => setMode('online'));
+
+// ── 联机面板事件 ──
+btnCreateRoom.addEventListener('click', async () => {
+    try {
+        await connectWebSocket();
+        sendOnlineMsg({ type: 'create_room' });
+    } catch (err) {
+        statusEl.textContent = '❌ 无法连接服务器，请确认服务器已启动';
+        statusEl.className = 'status';
+    }
+});
+
+btnJoinRoom.addEventListener('click', async () => {
+    const roomId = roomIdInput.value.trim().toUpperCase();
+    if (!roomId) {
+        statusEl.textContent = '❌ 请输入房间号';
+        statusEl.className = 'status';
+        return;
+    }
+    try {
+        await connectWebSocket();
+        sendOnlineMsg({ type: 'join_room', roomId });
+    } catch (err) {
+        statusEl.textContent = '❌ 无法连接服务器，请确认服务器已启动';
+        statusEl.className = 'status';
+    }
+});
+
+// 回车键加入房间
+roomIdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') btnJoinRoom.click();
+});
+
+btnCancelRoom.addEventListener('click', () => {
+    disconnectOnline();
+    statusEl.textContent = '';
+    statusEl.className = 'status';
+    initBoard();
+});
 
 // 难度切换
 diffBtns.forEach(btn => {

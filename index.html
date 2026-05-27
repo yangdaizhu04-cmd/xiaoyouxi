@@ -14,8 +14,27 @@
         <div class="mode-bar">
             <button class="mode-btn active" id="modePvP" data-mode="pvp">👥 双人对战</button>
             <button class="mode-btn" id="modePvAI" data-mode="pvai">🤖 人机对战</button>
+            <button class="mode-btn" id="modeOnline" data-mode="online">🌐 联机对战</button>
             <button class="sound-btn" id="soundToggle" title="音效开关">🔊</button>
             <button class="sound-btn theme-btn" id="themeToggle" title="切换主题">🌙</button>
+        </div>
+
+        <!-- ═══ 联机面板 ═══ -->
+        <div class="online-panel hidden" id="onlinePanel">
+            <div class="online-actions">
+                <button class="online-btn online-btn-create" id="btnCreateRoom">🏠 创建房间</button>
+                <span class="online-divider">或</span>
+                <div class="online-join">
+                    <input type="text" class="online-input" id="roomIdInput" placeholder="输入房间号" maxlength="5" autocomplete="off">
+                    <button class="online-btn online-btn-join" id="btnJoinRoom">🚪 加入</button>
+                </div>
+            </div>
+            <div class="online-status hidden" id="onlineStatus">
+                <span class="online-status-icon">⏳</span>
+                <span class="online-status-text" id="onlineStatusText">等待对手加入...</span>
+                <span class="online-room-badge">房间: <strong id="onlineRoomId"></strong></span>
+                <button class="online-btn online-btn-cancel" id="btnCancelRoom">✕ 取消</button>
+            </div>
         </div>
 
         <!-- ═══ AI 难度 ═══ -->

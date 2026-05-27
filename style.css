@@ -152,6 +152,169 @@ body {
 /* ---- 隐藏辅助类 ---- */
 .hidden { display: none !important; }
 
+/* ---- 联机面板 ---- */
+.online-panel {
+    width: 100%;
+    max-width: 600px;
+    background: var(--panel-bg, rgba(232, 213, 183, 0.08));
+    border: 1px solid var(--panel-border, rgba(232, 213, 183, 0.15));
+    border-radius: 14px;
+    padding: 16px 20px;
+    backdrop-filter: blur(4px);
+    transition: all 0.3s ease;
+}
+
+.online-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.online-divider {
+    color: var(--text-dim, #8a7d6a);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.online-join {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.online-btn {
+    padding: 8px 20px;
+    border: 1px solid var(--btn-border, rgba(232, 213, 183, 0.2));
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.online-btn:active {
+    transform: scale(0.96);
+}
+
+.online-btn-create {
+    background: linear-gradient(145deg, #27ae60, #1e8449);
+    color: white;
+    border-color: #27ae60;
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+.online-btn-create:hover {
+    box-shadow: 0 6px 20px rgba(39, 174, 96, 0.5);
+    transform: translateY(-1px);
+}
+
+.online-btn-join {
+    background: linear-gradient(145deg, #8e44ad, #6c3483);
+    color: white;
+    border-color: #8e44ad;
+    box-shadow: 0 4px 12px rgba(142, 68, 173, 0.3);
+}
+
+.online-btn-join:hover {
+    box-shadow: 0 6px 20px rgba(142, 68, 173, 0.5);
+    transform: translateY(-1px);
+}
+
+.online-btn-cancel {
+    background: transparent;
+    color: #e74c3c;
+    border-color: rgba(231, 76, 60, 0.3);
+    padding: 6px 16px;
+    font-size: 0.82rem;
+}
+
+.online-btn-cancel:hover {
+    background: rgba(231, 76, 60, 0.15);
+    border-color: rgba(231, 76, 60, 0.5);
+}
+
+.online-input {
+    padding: 8px 14px;
+    border: 1px solid var(--btn-border, rgba(232, 213, 183, 0.25));
+    border-radius: 10px;
+    background: rgba(0,0,0,0.2);
+    color: var(--text-primary, #e8d5b7);
+    font-size: 1rem;
+    font-weight: 600;
+    width: 120px;
+    text-align: center;
+    letter-spacing: 3px;
+    outline: none;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+}
+
+.online-input::placeholder {
+    color: var(--text-dim, #8a7d6a);
+    letter-spacing: 1px;
+    font-weight: 400;
+    font-size: 0.8rem;
+}
+
+.online-input:focus {
+    border-color: #d4a853;
+    box-shadow: 0 0 10px rgba(212, 168, 83, 0.2);
+}
+
+.online-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.online-status-icon {
+    font-size: 1.2rem;
+    animation: spin-icon 1.5s linear infinite;
+}
+
+@keyframes spin-icon {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.online-status-text {
+    color: var(--text-primary, #e8d5b7);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.online-room-badge {
+    color: var(--text-secondary, #a89b8a);
+    font-size: 0.9rem;
+    background: rgba(232, 213, 183, 0.1);
+    padding: 4px 12px;
+    border-radius: 8px;
+}
+
+.online-room-badge strong {
+    color: #f1c40f;
+    letter-spacing: 2px;
+}
+
+@media (max-width: 660px) {
+    .online-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .online-join {
+        flex-direction: column;
+    }
+    .online-input {
+        width: 100%;
+    }
+}
+
 /* ---- AI 难度 ---- */
 .diff-bar {
     display: flex;
